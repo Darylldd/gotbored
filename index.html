@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Miku Sudoku: Ultimate Stage</title>
+    <style>
+        :root {
+            --miku-teal: #39C5BB;
+            --miku-pink: #FF007F;
+            --miku-black: #0a0a0a;
+            --miku-gray: #1a1a1a;
+            --glow: 0 0 15px var(--miku-teal);
+            --bg-move-x: 0px;
+            --bg-move-y: 0px;
+        }
+
+        body.snow-miku { --miku-teal: #a0d8ef; --miku-pink: #ffffff; --miku-black: #1a2a40; }
+        body.sakura-miku { --miku-teal: #ffb7c5; --miku-pink: #d0104c; --miku-black: #2d0a15; }
+
+        * { user-select: none; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+        body {
+            background-color: var(--miku-black);
+            color: var(--miku-teal);
+            font-family: 'Courier New', monospace;
+            display: flex; flex-direction: column; align-items: center;
+            margin: 0; min-height: 100vh; overflow-x: hidden; transition: background 0.5s ease;
+            background-image: radial-gradient(circle at center, transparent 0%, #000 90%);
+            perspective: 1000px;
+            padding-bottom: 50px;
+        }
+
+        /* --- BACKGROUND PARALLAX --- */
+        #bg-pattern-container {
+            position: fixed;
+            inset: -100px; 
+            z-index: -2;
+            overflow: hidden;
+            pointer-events: none;
+            opacity: 0.2;
+            /* Uses the CSS variables updated by Mouse or Gyroscope */
+            transform: translate(var(--bg-move-x), var(--bg-move-y));
+            transition: transform 0.1s linear; /* Faster transition for shake response */
+        }
+
+        .bg-icon {
+            position: absolute;
+            font-size: 2.5rem;
+            color: var(--miku-teal);
+            filter: blur(0.5px);
+            animation: floatSlow 20s linear infinite;
+            transform-origin: center;
+        }
+
+        @keyframes floatSlow {
+            0% { transform: translate(0, 0) rotate(0deg) scale(0.8); opacity: 0; }
+            10% { opacity: 1; }
+            90% { opacity: 1; }
+            100% { transform: translate(var(--move-x), var(--move-y)) rotate(var(--rot-end)) scale(1.5); opacity: 0; }
+        }
+
+        /* --- FEVER MODE EFFECTS --- */
+        body.fever-active { animation: feverBg 0.2s infinite; }
+        @keyframes feverBg { 0% { background-color: #1a0000; } 50% { background-color: #001a1a; } 100% { background-color: #1a001a; } }
+        .fever-shake { animation: shake 0.1s infinite; }
+        @keyframes shake { 0% { transform: translate(1px,1px); } 50% { transform: translate(-1px,-2px); } 100% { transform: translate(1px,1px); } }
+
+        body.fever-active .bg-icon {
+            animation: feverGlitch 0.15s steps(2) infinite !important;
+            color: white;
+            opacity: 0.8;
+        }
+
+        @keyframes feverGlitch {
+            0% { transform: translate(10px, -10px) skew(10deg); filter: drop-shadow(-5px 0 0 var(--miku-pink)); }
+            50% { transform: translate(-10px, 10px) skew(-10deg); filter: drop-shadow(5px 0 0 var(--miku-teal)); }
+        }
+
+        /* --- TRAIL --- */
+        .trail {
+            position: fixed; width: 8px; height: 8px; border-radius: 50%;
+            background: var(--miku-pink); pointer-events: none; z-index: 9998;
+            box-shadow: 0 0 15px var(--miku-pink), 0 0 5px white; 
+            animation: fadeOut 0.4s forwards;
+        }
+        @keyframes fadeOut { to { opacity: 0; transform: scale(0); } }
+
+        /* --- BOARD & CELLS --- */
+        #board {
+            display: grid; 
+            grid-template-columns: repeat(9, 1fr); 
+            width: 96vw;
+            max-width: 415px; 
+            margin-top: 15px;
+            background: var(--miku-teal); 
+            gap: 1px; 
+            border: 4px solid var(--miku-teal);
+            box-shadow: 0 0 40px rgba(57, 197, 187, 0.4);
+        }
+        
+        .cell { 
+            width: 100%; 
+            aspect-ratio: 1 / 1; 
+            background: var(--miku-black); 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            font-size: clamp(0.8rem, 4vw, 1.2rem); 
+            transition: 0.2s; 
+            cursor: pointer; 
+        }
+        .cell:hover { background: #111; box-shadow: inset 0 0 10px var(--miku-teal); }
+        .cell.fixed { color: var(--miku-teal); font-weight: bold; opacity: 0.6; cursor: default; }
+        .cell.selected { background: var(--miku-pink); color: white; box-shadow: 0 0 25px var(--miku-pink); z-index: 10; transform: scale(1.1); }
+
+        /* --- DASHBOARD --- */
+        .dashboard {
+            display: flex; gap: 25px; align-items: center; margin-top: 20px;
+            padding: 20px; border: 1px solid var(--miku-teal); border-radius: 15px;
+            background: rgba(0,0,0,0.8); box-shadow: var(--glow);
+            backdrop-filter: blur(8px);
+            width: 90%;
+            max-width: 500px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        /* --- SEGMENTED FEVER BAR --- */
+        .fever-container-label {
+            width: 96vw;
+            max-width: 415px;
+            text-align: left; font-size: 0.8rem; margin-top: 15px;
+            text-transform: uppercase; color: var(--miku-teal);
+        }
+        .fever-bar {
+            width: 96vw;
+            max-width: 415px;
+            height: 20px; background: #111; margin-bottom: 15px;
+            border: 2px solid var(--miku-teal); border-radius: 2px; overflow: hidden;
+            position: relative; box-shadow: var(--glow);
+        }
+        #fever-fill {
+            width: 0%; height: 100%; 
+            background: linear-gradient(90deg, var(--miku-teal) 0%, var(--miku-pink) 100%);
+            background-image: repeating-linear-gradient(
+                90deg,
+                transparent,
+                transparent 8px,
+                rgba(0,0,0,0.5) 8px,
+                rgba(0,0,0,0.5) 12px
+            );
+            background-color: var(--miku-teal);
+            transition: width 0.3s ease-out;
+        }
+
+        /* --- NUMPAD BUTTONS --- */
+        .btn { 
+            background: none; 
+            border: 1px solid var(--miku-teal); 
+            color: var(--miku-teal); 
+            font-family: inherit; 
+            transition: 0.2s; 
+            border-radius: 5px; 
+            cursor: pointer; 
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .btn:hover { background: var(--miku-teal); color: black; box-shadow: var(--glow); transform: translateY(-2px); }
+        .mode-btn { padding: 12px; margin: 4px; } 
+
+        #numpad {
+            display: grid;
+            gap: 8px;
+            width: 96vw;
+            max-width: 500px;
+            margin-top: 5px;
+            grid-template-columns: repeat(9, 1fr);
+        }
+
+        #numpad .btn {
+            aspect-ratio: 1/1; 
+            font-size: 1.2rem;
+            width: 100%;
+            margin: 0;
+            padding: 0;
+        }
+
+        .miku-reaction { width: 120px; height: 120px; object-fit: contain; filter: drop-shadow(0 0 5px var(--miku-teal)); }
+        #loader { position: fixed; inset: 0; background: var(--miku-black); z-index: 10000; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 20px; text-align: center;}
+        #victory { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.95); z-index: 900; flex-direction: column; justify-content: center; align-items: center; padding: 20px; text-align: center; }
+
+        /* --- MOBILE OPTIMIZATIONS --- */
+        @media (max-width: 600px) {
+            .dashboard { padding: 10px; gap: 15px; }
+            .miku-reaction { width: 80px; height: 80px; }
+            #numpad { grid-template-columns: repeat(5, 1fr); gap: 10px; }
+            #numpad .btn { font-size: 1.5rem; }
+        }
+    </style>
+</head>
+<body class="append-miku">
+
+    <div id="bg-pattern-container"></div>
+    <div id="particles"></div>
+
+    <div id="loader">
+        <img src="thumms.png" class="miku-reaction" style="animation: spin 2s infinite linear;">
+        <h1 style="color:var(--miku-teal); text-shadow: var(--glow); letter-spacing: 5px; margin-top:20px;">MIKU PROJECT SUDOKU</h1>
+        <button class="btn mode-btn" onclick="startConcert(); requestMotionAccess();" style="margin-top:20px;">[ INITIALIZE CONCERT ]</button>
+    </div>
+
+    <div id="victory">
+        <img src="cehrr.png" style="width:250px; max-width:80%; margin-bottom:20px;">
+        <h1 style="color:var(--miku-pink); font-size: 2.5rem;">STAGE CLEAR!</h1>
+        <p id="final-time" style="color:white; font-size: 1.2rem; margin-bottom:20px;"></p>
+        <button class="btn mode-btn" onclick="location.reload()">ENCORE?</button>
+    </div>
+
+    <div class="dashboard">
+        <img id="miku-face" src="thumms.png" class="miku-reaction">
+        <div style="text-align: right; flex-grow: 1;">
+            <div id="timer" style="font-size: 1.2rem;">TIME: 00:00</div>
+            <div id="song-name" style="font-size: 0.9rem; color: #aaa; margin: 5px 0;">READY...</div>
+            <div id="combo-display" style="visibility: hidden; color: var(--miku-pink); font-weight: bold; font-size: 1.2rem;">COMBO x0</div>
+        </div>
+    </div>
+
+    <div style="margin-top: 15px; display:flex; gap:5px; flex-wrap: wrap; justify-content: center;">
+        <button class="btn mode-btn" onclick="setMode('append')">APPEND</button>
+        <button class="btn mode-btn" onclick="setMode('snow')">SNOW</button>
+        <button class="btn mode-btn" onclick="setMode('sakura')">SAKURA</button>
+    </div>
+
+    <div id="board"></div>
+    <div class="fever-container-label">fever container</div>
+    <div class="fever-bar"><div id="fever-fill"></div></div>
+    <div id="numpad"></div>
+    <audio id="bgm-player" loop></audio>
+
+    <script>
+        const SONGS = ["milkcrown.mp3", "rolling.mp3", "gomenne.mp3", "ainouta.mp3", "buriki.mp3"];
+        const voiceBank = { start: "start.mp3", win: "win.mp3", hai: "hai.mp3" };
+        const THEME_ICONS = {
+            append: ["🎵", "🎧", "🥬", "🎹", "✨", "⊞", "♪", "♫", "💠"],
+            snow: ["❄️", "🧊", "⛸️", "🏔️", "✨", "⚪", "💎", "🌟"],
+            sakura: ["🌸", "💮", "🍡", "🎐", "✨", "🍃", "🌸", "🏮"]
+        };
+
+        let currentBoard = [], initialPuzzle = [], selected = null, seconds = 0, active = false, combo = 0;
+
+        function generatePattern(mode) {
+            const container = document.getElementById('bg-pattern-container');
+            container.innerHTML = ''; 
+            const icons = THEME_ICONS[mode] || THEME_ICONS.append;
+            for (let i = 0; i < 60; i++) {
+                const icon = document.createElement('div');
+                icon.className = 'bg-icon';
+                icon.innerText = icons[Math.floor(Math.random() * icons.length)];
+                icon.style.left = Math.random() * 100 + 'vw';
+                icon.style.top = Math.random() * 100 + 'vh';
+                icon.style.setProperty('--move-x', (Math.random() * 400 - 200) + 'px');
+                icon.style.setProperty('--move-y', (Math.random() * 400 - 200) + 'px');
+                icon.style.setProperty('--rot-end', (Math.random() * 720) + 'deg');
+                icon.style.animationDelay = (Math.random() * -30) + 's';
+                icon.style.animationDuration = (10 + Math.random() * 15) + 's';
+                container.appendChild(icon);
+            }
+        }
+
+        // --- MOUSE PARALLAX (DESKTOP) ---
+        document.addEventListener('mousemove', e => {
+            const moveX = (e.clientX - window.innerWidth / 2) / 30;
+            const moveY = (e.clientY - window.innerHeight / 2) / 30;
+            document.documentElement.style.setProperty('--bg-move-x', `${-moveX}px`);
+            document.documentElement.style.setProperty('--bg-move-y', `${-moveY}px`);
+            const t = document.createElement('div');
+            t.className = 'trail';
+            t.style.left = e.clientX + 'px';
+            t.style.top = e.clientY + 'px';
+            document.body.appendChild(t);
+            setTimeout(() => t.remove(), 400);
+        });
+
+        // --- PHONE SHAKE/TILT PARALLAX (MOBILE) ---
+        function requestMotionAccess() {
+            // iOS 13+ requires specific permission
+            if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+                DeviceMotionEvent.requestPermission()
+                    .then(permissionState => {
+                        if (permissionState === 'granted') {
+                            window.addEventListener('devicemotion', handleMotion);
+                        }
+                    })
+                    .catch(console.error);
+            } else {
+                // Android and older devices usually allow it automatically
+                window.addEventListener('devicemotion', handleMotion);
+            }
+        }
+
+        function handleMotion(event) {
+            // acc.x is left/right tilt, acc.y is up/down tilt
+            const acc = event.accelerationIncludingGravity;
+            if(!acc) return;
+
+            // Multiplier controls how much the background moves when shaken
+            // We invert X so it feels like depth parallax
+            const moveX = -(acc.x * 5); 
+            const moveY = (acc.y * 5);
+
+            document.documentElement.style.setProperty('--bg-move-x', `${moveX}px`);
+            document.documentElement.style.setProperty('--bg-move-y', `${moveY}px`);
+        }
+
+        document.addEventListener('touchmove', e => {
+            const touch = e.touches[0];
+            const t = document.createElement('div');
+            t.className = 'trail';
+            t.style.left = touch.clientX + 'px';
+            t.style.top = touch.clientY + 'px';
+            document.body.appendChild(t);
+            setTimeout(() => t.remove(), 400);
+        }, {passive: true});
+
+        function setMode(m) { 
+            document.body.className = m + '-miku'; 
+            playVoice(voiceBank.hai); 
+            generatePattern(m);
+        }
+
+        function triggerFever() {
+            document.body.classList.add('fever-active');
+            document.getElementById('board').classList.add('fever-shake');
+            document.getElementById('miku-face').src = "shokk.png";
+            setTimeout(() => {
+                document.body.classList.remove('fever-active');
+                document.getElementById('board').classList.remove('fever-shake');
+                document.getElementById('miku-face').src = "thumms.png";
+                combo = 0;
+                document.getElementById('combo-display').style.visibility = 'hidden';
+            }, 5000);
+        }
+
+        function startConcert() {
+            document.getElementById('loader').style.display = 'none';
+            active = true;
+            playVoice(voiceBank.start); 
+            const randSong = SONGS[Math.floor(Math.random() * SONGS.length)];
+            const player = document.getElementById('bgm-player');
+            player.src = randSong;
+            player.volume = 0.5;
+            player.play().catch(e => {});
+            document.getElementById('song-name').innerText = "NOW PLAYING: " + randSong.toUpperCase();
+            updateTimer();
+        }
+
+        function playVoice(filename) {
+            const sfx = new Audio(filename);
+            sfx.volume = 0.7;
+            sfx.play().catch(e => {});
+        }
+
+        function init() {
+            const b = document.getElementById('board');
+            const n = document.getElementById('numpad');
+            const data = generateRandomSudoku();
+            initialPuzzle = data.puzzle;
+            currentBoard = JSON.parse(JSON.stringify(initialPuzzle));
+
+            initialPuzzle.forEach((row, r) => {
+                row.forEach((val, c) => {
+                    const cell = document.createElement('div');
+                    cell.className = 'cell';
+                    if(val !== 0) {
+                        cell.innerText = val; cell.classList.add('fixed');
+                    } else {
+                        cell.onclick = () => {
+                            document.querySelectorAll('.cell').forEach(e => e.classList.remove('selected'));
+                            cell.classList.add('selected');
+                            selected = {r, c, el: cell};
+                            playVoice(voiceBank.hai);
+                        };
+                    }
+                    b.appendChild(cell);
+                });
+            });
+
+            for(let i=1; i<=9; i++) {
+                const btn = document.createElement('button');
+                btn.className = 'btn'; btn.innerText = i;
+                btn.onclick = () => {
+                    if(!selected) return;
+                    playVoice(i + ".mp3");
+                    selected.el.innerText = i;
+                    currentBoard[selected.r][selected.c] = i;
+                    document.getElementById('bg-pattern-container').style.opacity = '0.5';
+                    setTimeout(() => document.getElementById('bg-pattern-container').style.opacity = '0.2', 100);
+                    combo++;
+                    const cTxt = document.getElementById('combo-display');
+                    cTxt.style.visibility = 'visible';
+                    cTxt.innerText = "COMBO x" + combo;
+                    if(combo >= 10) triggerFever();
+                    checkWin();
+                };
+                n.appendChild(btn);
+            }
+            generatePattern('append');
+        }
+
+        function generateRandomSudoku() {
+            let board = [[1,2,3,4,5,6,7,8,9], [4,5,6,7,8,9,1,2,3], [7,8,9,1,2,3,4,5,6], [2,3,1,5,6,4,8,9,7], [5,6,4,8,9,7,2,3,1], [8,9,7,2,3,1,5,6,4], [3,1,2,6,4,5,9,7,8], [6,4,5,9,7,8,3,1,2], [9,7,8,3,1,2,6,4,5]];
+            let nums = [1,2,3,4,5,6,7,8,9].sort(() => Math.random() - 0.5);
+            board = board.map(r => r.map(c => nums[c-1]));
+            let puzzle = board.map(row => [...row]);
+            let removed = 0;
+            while(removed < 40) {
+                let r = Math.floor(Math.random()*9), c = Math.floor(Math.random()*9);
+                if(puzzle[r][c] !== 0) { puzzle[r][c] = 0; removed++; }
+            }
+            return { puzzle };
+        }
+
+        function checkWin() {
+            const filled = currentBoard.flat().filter(x => x !== 0).length;
+            document.getElementById('fever-fill').style.width = (filled/81*100) + "%";
+            if(filled === 81) {
+                active = false;
+                document.getElementById('victory').style.display = 'flex';
+                document.getElementById('final-time').innerText = "FINAL SCORE TIME: " + format(seconds);
+                playVoice(voiceBank.win);
+            }
+        }
+
+        function format(s) { return Math.floor(s/60).toString().padStart(2,'0') + ":" + (s%60).toString().padStart(2,'0'); }
+        function updateTimer() { if(active) { seconds++; document.getElementById('timer').innerText = "TIME: " + format(seconds); setTimeout(updateTimer, 1000); }}
+        init();
+    </script>
+</body>
+</html>
